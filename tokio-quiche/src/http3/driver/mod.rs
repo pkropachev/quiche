@@ -83,11 +83,13 @@ pub use self::client::ClientH3Driver;
 pub use self::client::ClientH3Event;
 pub use self::client::ClientRequestSender;
 pub use self::client::NewClientRequest;
+pub use self::server::FinishStreamDirection;
 pub use self::server::ServerEventStream;
 pub use self::server::ServerH3Command;
 pub use self::server::ServerH3Controller;
 pub use self::server::ServerH3Driver;
 pub use self::server::ServerH3Event;
+pub use self::server::StreamCommand;
 
 // The default priority for HTTP/3 responses if the application didn't provide
 // one.
@@ -1097,7 +1099,7 @@ impl<H: DriverHooks> ApplicationOverQuic for H3Driver<H> {
         // Make sure controller is not starved, but also not prioritized in the
         // biased select. So poll it last, however also perform a try_recv
         // each iteration.
-        if let Ok(cmd) = self.cmd_recv.try_recv() {
+        while let Ok(cmd) = self.cmd_recv.try_recv() {
             H::conn_command(self, qconn, cmd)?;
         }
 
@@ -1188,8 +1190,12 @@ impl<H: DriverHooks> H3Controller<H> {
             .expect("No event receiver on H3Controller")
     }
 
-    /// Creates a [`QuicCommand`] sender for the paired [H3Driver].
-    pub fn cmd_sender(&self) -> RequestSender<H::Command, QuicCommand> {
+    /// Creates a command sender for the paired [H3Driver].
+    // !!! TODO !!! - do we actually need this? Can we leave it as a QuicCommand
+    // and somehow allow others to make changes?
+    pub fn cmd_sender<T: Into<H::Command>>(
+        &self,
+    ) -> RequestSender<H::Command, T> {
         RequestSender {
             sender: self.cmd_sender.clone(),
             _r: Default::default(),
